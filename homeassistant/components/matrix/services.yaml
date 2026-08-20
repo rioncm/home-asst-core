@@ -1,5 +1,10 @@
 send_message:
   fields:
+    config_entry_id:
+      required: false
+      selector:
+        config_entry:
+          integration: matrix
     message:
       required: true
       example: This is a message I am sending to matrix
@@ -32,6 +37,11 @@ send_message:
                 text:
 react:
   fields:
+    config_entry_id:
+      required: false
+      selector:
+        config_entry:
+          integration: matrix
     reaction:
       required: true
       example: "👍"

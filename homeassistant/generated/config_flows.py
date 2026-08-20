@@ -460,6 +460,7 @@ FLOWS = {
         "mailgun",
         "marantz_infrared",
         "mastodon",
+        "matrix",
         "matter",
         "mcp",
         "mcp_server",

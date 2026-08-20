@@ -6,7 +6,7 @@ import logging
 import mimetypes
 import os
 import re
-from typing import Any, Final, NewType, Required, TypedDict
+from typing import Any, NewType, Required, TypedDict
 
 import aiofiles.os
 from nio import AsyncClient, Event, MatrixRoom
@@ -26,8 +26,11 @@ from nio.responses import (
 from PIL import Image
 import voluptuous as vol
 
+from homeassistant import config_entries
 from homeassistant.components.notify import ATTR_DATA, ATTR_MESSAGE, ATTR_TARGET
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
+    CONF_ACCESS_TOKEN,
     CONF_NAME,
     CONF_PASSWORD,
     CONF_USERNAME,
@@ -36,12 +39,22 @@ from homeassistant.const import (
     EVENT_HOMEASSISTANT_STOP,
 )
 from homeassistant.core import Event as HassEvent, HomeAssistant, ServiceCall
-from homeassistant.exceptions import ConfigEntryAuthFailed, HomeAssistantError
+from homeassistant.exceptions import (
+    ConfigEntryAuthFailed,
+    ConfigEntryNotReady,
+    HomeAssistantError,
+)
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.json import save_json
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.util.json import JsonObjectType, load_json_object
 
+from .client import (
+    MatrixAuthenticationError,
+    MatrixConnectionError,
+    MatrixOutboundClient,
+    async_login_client,
+)
 from .const import (
     ATTR_FORMAT,
     ATTR_IMAGES,
@@ -49,7 +62,14 @@ from .const import (
     ATTR_REACTION,
     ATTR_ROOM,
     ATTR_THREAD_ID,
+    CONF_COMMANDS,
+    CONF_EXPRESSION,
+    CONF_HOMESERVER,
+    CONF_REACTION,
+    CONF_ROOMS,
     CONF_ROOMS_REGEX,
+    CONF_USERNAME_REGEX,
+    CONF_WORD,
     DOMAIN,
     FORMAT_HTML,
 )
@@ -58,15 +78,6 @@ from .services import async_setup_services
 _LOGGER = logging.getLogger(__name__)
 
 SESSION_FILE = ".matrix.conf"
-
-CONF_HOMESERVER: Final = "homeserver"
-CONF_ROOMS: Final = "rooms"
-CONF_COMMANDS: Final = "commands"
-CONF_WORD: Final = "word"
-CONF_EXPRESSION: Final = "expression"
-CONF_REACTION: Final = "reaction"
-
-CONF_USERNAME_REGEX = "^@[^:]*:.*"
 
 EVENT_MATRIX_COMMAND = "matrix_command"
 
@@ -108,7 +119,7 @@ COMMAND_SCHEMA = vol.All(
 
 CONFIG_SCHEMA = vol.Schema(
     {
-        DOMAIN: vol.Schema(
+        vol.Optional(DOMAIN): vol.Schema(
             {
                 vol.Required(CONF_HOMESERVER): cv.url,
                 vol.Optional(CONF_VERIFY_SSL, default=True): cv.boolean,
@@ -133,21 +144,68 @@ def _read_image_size(image_path: str) -> tuple[int, int]:
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up the Matrix bot component."""
-    config = config[DOMAIN]
-
-    hass.data[DOMAIN] = MatrixBot(
-        hass,
-        os.path.join(hass.config.path(), SESSION_FILE),
-        config[CONF_HOMESERVER],
-        config[CONF_VERIFY_SSL],
-        config[CONF_USERNAME],
-        config[CONF_PASSWORD],
-        config[CONF_ROOMS],
-        config[CONF_COMMANDS],
-    )
-
     async_setup_services(hass)
 
+    if matrix_config := config.get(DOMAIN):
+        # The compatibility bot has no config entry or runtime_data.
+        hass.data[DOMAIN] = MatrixBot(  # pylint: disable=home-assistant-use-runtime-data
+            hass,
+            os.path.join(hass.config.path(), SESSION_FILE),
+            matrix_config[CONF_HOMESERVER],
+            matrix_config[CONF_VERIFY_SSL],
+            matrix_config[CONF_USERNAME],
+            matrix_config[CONF_PASSWORD],
+            matrix_config[CONF_ROOMS],
+            matrix_config[CONF_COMMANDS],
+        )
+        hass.async_create_task(
+            hass.config_entries.flow.async_init(
+                DOMAIN,
+                context={"source": config_entries.SOURCE_IMPORT},
+                data=matrix_config,
+            ),
+            eager_start=False,
+        )
+
+    return True
+
+
+type MatrixConfigEntry = ConfigEntry[MatrixOutboundClient]
+
+
+async def async_setup_entry(hass: HomeAssistant, entry: MatrixConfigEntry) -> bool:
+    """Set up a UI-managed Matrix account."""
+    try:
+        client, _, access_token = await async_login_client(
+            entry.data[CONF_HOMESERVER],
+            entry.data[CONF_VERIFY_SSL],
+            entry.data[CONF_USERNAME],
+            entry.data[CONF_PASSWORD],
+            entry.data.get(CONF_ACCESS_TOKEN),
+        )
+    except MatrixAuthenticationError as err:
+        raise ConfigEntryAuthFailed(
+            translation_domain=DOMAIN,
+            translation_key="invalid_auth",
+        ) from err
+    except MatrixConnectionError as err:
+        raise ConfigEntryNotReady(
+            translation_domain=DOMAIN,
+            translation_key="cannot_connect",
+        ) from err
+
+    if access_token != entry.data.get(CONF_ACCESS_TOKEN):
+        hass.config_entries.async_update_entry(
+            entry, data=entry.data | {CONF_ACCESS_TOKEN: access_token}
+        )
+
+    entry.runtime_data = MatrixOutboundClient(hass, client)
+    return True
+
+
+async def async_unload_entry(hass: HomeAssistant, entry: MatrixConfigEntry) -> bool:
+    """Unload a UI-managed Matrix account."""
+    await entry.runtime_data.async_close()
     return True
 
 

@@ -270,7 +270,10 @@ MOCK_REACTION_COMMANDS = {
 @pytest.fixture
 def mock_client():
     """Return mocked AsyncClient."""
-    with patch("homeassistant.components.matrix.AsyncClient", _MockAsyncClient) as mock:
+    with (
+        patch("homeassistant.components.matrix.AsyncClient", _MockAsyncClient) as mock,
+        patch("homeassistant.components.matrix.client.AsyncClient", _MockAsyncClient),
+    ):
         yield mock
 
 

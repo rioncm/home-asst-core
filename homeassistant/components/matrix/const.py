@@ -1,6 +1,16 @@
 """Constants for the Matrix integration."""
 
+from typing import Final
+
 DOMAIN = "matrix"
+
+CONF_HOMESERVER: Final = "homeserver"
+CONF_ROOMS: Final = "rooms"
+CONF_COMMANDS: Final = "commands"
+CONF_WORD: Final = "word"
+CONF_EXPRESSION: Final = "expression"
+CONF_REACTION: Final = "reaction"
+CONF_USERNAME_REGEX: Final = "^@[^:]*:.*"
 
 SERVICE_SEND_MESSAGE = "send_message"
 SERVICE_REACT = "react"

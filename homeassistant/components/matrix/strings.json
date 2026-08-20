@@ -1,4 +1,66 @@
 {
+  "config": {
+    "abort": {
+      "already_configured": "[%key:common::config_flow::abort::already_configured_account%]",
+      "reauth_successful": "[%key:common::config_flow::abort::reauth_successful%]",
+      "reconfigure_successful": "[%key:common::config_flow::abort::reconfigure_successful%]",
+      "wrong_account": "The credentials belong to a different Matrix account."
+    },
+    "error": {
+      "cannot_connect": "Failed to connect.",
+      "invalid_auth": "Invalid authentication.",
+      "invalid_username": "Enter a full Matrix user ID, such as @user:example.com."
+    },
+    "step": {
+      "reauth_confirm": {
+        "data": {
+          "password": "[%key:common::config_flow::data::password%]"
+        },
+        "description": "Enter a new password for {username}."
+      },
+      "reconfigure": {
+        "data": {
+          "homeserver": "Homeserver URL",
+          "password": "[%key:common::config_flow::data::password%]",
+          "username": "[%key:common::config_flow::data::username%]",
+          "verify_ssl": "Verify TLS certificate"
+        }
+      },
+      "user": {
+        "data": {
+          "homeserver": "Homeserver URL",
+          "password": "[%key:common::config_flow::data::password%]",
+          "username": "[%key:common::config_flow::data::username%]",
+          "verify_ssl": "Verify TLS certificate"
+        },
+        "data_description": {
+          "homeserver": "The URL of the Matrix homeserver.",
+          "username": "The full Matrix user ID, such as @user:example.com.",
+          "verify_ssl": "Verify the homeserver's TLS certificate."
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "cannot_connect": {
+      "message": "Failed to connect to the Matrix homeserver."
+    },
+    "delivery_failed": {
+      "message": "The Matrix homeserver rejected the message."
+    },
+    "invalid_auth": {
+      "message": "Matrix authentication failed."
+    },
+    "path_not_allowed": {
+      "message": "The image path is not in an allowed directory."
+    },
+    "room_not_found": {
+      "message": "The Matrix room alias could not be resolved."
+    },
+    "upload_failed": {
+      "message": "The image could not be uploaded to the Matrix homeserver."
+    }
+  },
   "selector": {
     "send_message_data": {
       "fields": {
@@ -27,6 +89,10 @@
     "react": {
       "description": "Sends a reaction to a message.",
       "fields": {
+        "config_entry_id": {
+          "description": "The UI-managed Matrix account to use. Leave empty for the legacy YAML bot.",
+          "name": "Matrix account"
+        },
         "message_id": {
           "description": "The ID of the message to react to.",
           "name": "Message ID"
@@ -45,6 +111,10 @@
     "send_message": {
       "description": "Sends message to target room(s).",
       "fields": {
+        "config_entry_id": {
+          "description": "The UI-managed Matrix account to use. Leave empty for the legacy YAML bot.",
+          "name": "Matrix account"
+        },
         "data": {
           "description": "Extended information of notification.",
           "name": "Data"

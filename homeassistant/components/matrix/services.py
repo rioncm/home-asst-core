@@ -5,8 +5,10 @@ from typing import TYPE_CHECKING
 import voluptuous as vol
 
 from homeassistant.components.notify import ATTR_DATA, ATTR_MESSAGE, ATTR_TARGET
+from homeassistant.const import ATTR_CONFIG_ENTRY_ID
 from homeassistant.core import HomeAssistant, ServiceCall, callback
-from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import config_validation as cv, service
+from homeassistant.helpers.selector import ConfigEntrySelector
 
 from .const import (
     ATTR_FORMAT,
@@ -24,7 +26,7 @@ from .const import (
 )
 
 if TYPE_CHECKING:
-    from . import MatrixBot
+    from . import MatrixBot, MatrixConfigEntry
 
 
 MESSAGE_FORMATS = [FORMAT_HTML, FORMAT_TEXT]
@@ -33,6 +35,9 @@ DEFAULT_MESSAGE_FORMAT = FORMAT_TEXT
 
 SERVICE_SCHEMA_SEND_MESSAGE = vol.Schema(
     {
+        vol.Optional(ATTR_CONFIG_ENTRY_ID): ConfigEntrySelector(
+            {"integration": DOMAIN}
+        ),
         vol.Required(ATTR_MESSAGE): cv.string,
         vol.Optional(ATTR_DATA, default={}): {
             vol.Optional(ATTR_FORMAT, default=DEFAULT_MESSAGE_FORMAT): vol.In(
@@ -49,6 +54,9 @@ SERVICE_SCHEMA_SEND_MESSAGE = vol.Schema(
 
 SERVICE_SCHEMA_REACT = vol.Schema(
     {
+        vol.Optional(ATTR_CONFIG_ENTRY_ID): ConfigEntrySelector(
+            {"integration": DOMAIN}
+        ),
         vol.Required(ATTR_REACTION): cv.string,
         vol.Required(ATTR_ROOM): cv.matches_regex(CONF_ROOMS_REGEX),
         vol.Required(ATTR_MESSAGE_ID): cv.string,
@@ -58,14 +66,34 @@ SERVICE_SCHEMA_REACT = vol.Schema(
 
 async def _handle_send_message(call: ServiceCall) -> None:
     """Handle the send_message service call."""
-    matrix_bot: MatrixBot = call.hass.data[DOMAIN]
-    await matrix_bot.handle_send_message(call)
+    if ATTR_CONFIG_ENTRY_ID not in call.data and DOMAIN in call.hass.data:
+        matrix_bot: MatrixBot = call.hass.data[DOMAIN]
+        await matrix_bot.handle_send_message(call)
+        return
+    entry: MatrixConfigEntry = service.async_get_config_entry(
+        call.hass, DOMAIN, call.data.get(ATTR_CONFIG_ENTRY_ID)
+    )
+    await entry.runtime_data.async_send_message(
+        call.data[ATTR_MESSAGE],
+        call.data[ATTR_TARGET],
+        call.data.get(ATTR_DATA),
+    )
 
 
 async def _handle_react(call: ServiceCall) -> None:
     """Handle the react service call."""
-    matrix_bot: MatrixBot = call.hass.data[DOMAIN]
-    await matrix_bot.handle_send_reaction(call)
+    if ATTR_CONFIG_ENTRY_ID not in call.data and DOMAIN in call.hass.data:
+        matrix_bot: MatrixBot = call.hass.data[DOMAIN]
+        await matrix_bot.handle_send_reaction(call)
+        return
+    entry: MatrixConfigEntry = service.async_get_config_entry(
+        call.hass, DOMAIN, call.data.get(ATTR_CONFIG_ENTRY_ID)
+    )
+    await entry.runtime_data.async_send_reaction(
+        call.data[ATTR_REACTION],
+        call.data[ATTR_ROOM],
+        call.data[ATTR_MESSAGE_ID],
+    )
 
 
 @callback
